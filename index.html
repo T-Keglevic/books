@@ -3,208 +3,758 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Book Catalog</title>
-    <!-- Include the HTML5-QRCode scanner library via CDN -->
+    <title>Book Catalogue & Barcode Scanner</title>
+    <!-- Tailwind CSS for sleek styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <!-- Lucide Icons via CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- HTML5-QRCode library via CDN -->
     <script src="https://unpkg.com/html5-qrcode"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        serif: ['"Playfair Display"', 'serif'],
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        :root {
-            --bg-color: #f4f7f6;
-            --card-bg: #ffffff;
-            --text-color: #333333;
-            --primary-color: #4a90e2;
-        }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #09090b; /* Zinc 950 obsidian dark background */
         }
-        h1, h2 { text-align: center; }
-        .scanner-section {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            margin-bottom: 30px;
+        /* Custom scrollbar styling for premium feel */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
         }
-        #reader {
-            width: 100%;
-            max-width: 500px;
-            margin: 0 auto;
-            background: #000;
+        ::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.02);
         }
-        .manual-input {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-            justify-content: center;
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.12);
+            border-radius: 999px;
         }
-        input, button {
-            padding: 10px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            font-size: 16px;
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.22);
         }
-        button {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
+        /* Scan viewport scanner square styling override */
+        #reader__scan_region {
+            border: none !important;
         }
-        button:hover { opacity: 0.9; }
-        .stats {
-            text-align: center;
-            font-weight: bold;
-            margin-bottom: 20px;
+        video {
+            object-fit: cover !important;
+            border-radius: 1rem;
         }
-        .book-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 20px;
-        }
-        .book-card {
-            background: var(--card-bg);
-            border-radius: 8px;
-            padding: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-        }
-        .book-card img {
-            max-width: 120px;
-            height: 170px;
-            object-fit: cover;
-            background: #e0e0e0;
-            margin-bottom: 10px;
-            border-radius: 4px;
-        }
-        .book-title { font-weight: bold; font-size: 14px; margin: 5px 0; }
-        .book-author { color: #666; font-size: 13px; }
     </style>
 </head>
-<body>
+<body class="text-zinc-200 min-h-screen pb-24">
 
-    <h1>📚 Personal Book Catalog</h1>
-    
-    <!-- Scanner & Manual Lookup Section -->
-    <div class="scanner-section">
-        <div id="reader"></div>
-        <div class="manual-input">
-            <input type="text" id="isbn-input" placeholder="Enter ISBN manually...">
-            <button onclick="lookupManualISBN()">Lookup</button>
+    <!-- Custom Toast Container -->
+    <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none max-w-sm w-full"></div>
+
+    <!-- Main Navigation Bar -->
+    <header class="border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="p-2 bg-amber-950/30 text-amber-500 rounded-xl">
+                    <i data-lucide="library" class="w-6 h-6"></i>
+                </span>
+                <span class="font-serif text-xl font-bold tracking-tight text-zinc-50">BookRoom</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="exportCatalog()" class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-zinc-300 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg transition">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i> Export
+                </button>
+                <label class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-zinc-300 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg transition cursor-pointer">
+                    <i data-lucide="upload" class="w-3.5 h-3.5"></i> Import
+                    <input type="file" id="import-file" class="hidden" accept=".json" onchange="importCatalog(event)">
+                </label>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+        
+        <!-- Stats and Quick Actions Section -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-zinc-900 border border-zinc-800/80 p-6 rounded-2xl shadow-sm flex items-center gap-4">
+                <div class="p-4 bg-emerald-950/30 text-emerald-400 rounded-xl">
+                    <i data-lucide="book" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <span class="block text-2xl font-bold text-zinc-50" id="stat-total">0</span>
+                    <span class="text-xs text-zinc-400 font-medium">Total Books Catalogued</span>
+                </div>
+            </div>
+            <div class="bg-zinc-900 border border-zinc-800/80 p-6 rounded-2xl shadow-sm flex items-center gap-4">
+                <div class="p-4 bg-amber-950/30 text-amber-400 rounded-xl">
+                    <i data-lucide="users" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <span class="block text-2xl font-bold text-zinc-50" id="stat-authors">0</span>
+                    <span class="text-xs text-zinc-400 font-medium">Unique Authors</span>
+                </div>
+            </div>
+            <!-- Scanner Quick Trigger Card -->
+            <div class="bg-gradient-to-tr from-zinc-900 to-zinc-950 border border-zinc-800/80 p-6 rounded-2xl shadow-sm flex items-center justify-between text-white">
+                <div class="flex items-center gap-4">
+                    <div class="p-3 bg-white/5 rounded-xl text-amber-400">
+                        <i data-lucide="qr-code" class="w-6 h-6 animate-pulse"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-sm text-zinc-100">Instant Scan</h4>
+                        <p class="text-xs text-zinc-400">Scan physical barcode</p>
+                    </div>
+                </div>
+                <button onclick="toggleScanner()" id="scanner-btn" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl transition shadow-lg shadow-amber-500/10">
+                    Open Camera
+                </button>
+            </div>
+        </section>
+
+        <!-- Dynamic Scanner Viewport Panel -->
+        <section id="scanner-panel" class="hidden bg-zinc-950 border border-zinc-800/80 p-6 rounded-3xl shadow-2xl mb-8 relative overflow-hidden transition-all duration-300">
+            <div class="absolute top-4 right-4 z-10 flex gap-2">
+                <select id="camera-select" class="bg-zinc-900 text-white text-xs rounded-xl px-3 py-1.5 border border-zinc-800 outline-none focus:ring-1 focus:ring-amber-500"></select>
+                <button onclick="toggleScanner()" class="p-2 bg-zinc-900 text-zinc-400 hover:text-white rounded-xl border border-zinc-800 transition">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="max-w-md mx-auto flex flex-col items-center">
+                <h3 class="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 bg-red-500 rounded-full animate-ping"></span> Live Scanner
+                </h3>
+                <div class="w-full aspect-[4/3] bg-zinc-900 rounded-2xl relative overflow-hidden flex items-center justify-center border border-zinc-800">
+                    <div id="reader" class="w-full h-full"></div>
+                    <!-- Overlaid guides -->
+                    <div class="absolute inset-0 pointer-events-none border-[32px] border-zinc-950/40 flex items-center justify-center">
+                        <div class="w-64 h-32 border-2 border-dashed border-amber-400/80 rounded-xl relative">
+                            <span class="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-amber-400"></span>
+                            <span class="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-amber-400"></span>
+                            <span class="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-amber-400"></span>
+                            <span class="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-amber-400"></span>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-xs text-zinc-400 mt-4 text-center">Place the barcode clearly inside the highlighted viewport guide.</p>
+            </div>
+        </section>
+
+        <!-- Search, Filter & Manual Creation Panel -->
+        <section class="flex flex-col md:flex-row gap-4 justify-between items-center mb-8">
+            <div class="relative w-full md:max-w-md">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                </span>
+                <input type="text" id="search-input" oninput="filterCatalog()" placeholder="Search title, author, or ISBN..." class="w-full bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+            </div>
+            <div class="flex items-center gap-2 w-full md:w-auto">
+                <button onclick="openModal('add-modal')" class="flex-1 md:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 text-sm font-bold rounded-xl transition shadow-sm">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Add Book Manually
+                </button>
+            </div>
+        </section>
+
+        <!-- Catalog Library Cards Grid -->
+        <section>
+            <div id="catalog-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                <!-- Dynamic cards populated here -->
+            </div>
+            <!-- Empty state illustration -->
+            <div id="empty-state" class="hidden flex-col items-center justify-center py-20 text-center">
+                <div class="w-20 h-20 bg-zinc-900 border border-zinc-800/80 rounded-2xl flex items-center justify-center text-zinc-500 mb-4">
+                    <i data-lucide="inbox" class="w-10 h-10"></i>
+                </div>
+                <h3 class="font-serif font-semibold text-lg text-zinc-100">Your library shelves are empty</h3>
+                <p class="text-zinc-400 text-sm max-w-sm mt-1">Start scanning book barcodes with your camera or enter them manually to build your perfect collection.</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal: Add New Book -->
+    <div id="add-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl relative border border-zinc-800 transform scale-95 transition-all text-zinc-100">
+            <button onclick="closeModal('add-modal')" class="absolute top-4 right-4 p-2 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-zinc-200 transition">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <h3 class="font-serif text-xl font-bold text-zinc-50 mb-2">Manual Entry</h3>
+            <p class="text-zinc-400 text-xs mb-6">Create a new book record instantly. Cover art is generated automatically if you do not specify an image URL.</p>
+            <form id="add-form" onsubmit="handleAddForm(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1.5">Book Title <span class="text-red-400">*</span></label>
+                    <input type="text" id="add-title" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1.5">Author <span class="text-red-400">*</span></label>
+                    <input type="text" id="add-author" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-zinc-400 mb-1.5">ISBN Number</label>
+                        <input type="text" id="add-isbn" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition" placeholder="e.g. 978...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-zinc-400 mb-1.5">Publisher</label>
+                        <input type="text" id="add-publisher" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1.5">Custom Cover Image URL</label>
+                    <input type="url" id="add-cover" placeholder="https://..." class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+                </div>
+                <div class="pt-2 flex gap-3">
+                    <button type="button" onclick="closeModal('add-modal')" class="flex-1 py-3 text-sm font-semibold border border-zinc-800 rounded-xl hover:bg-zinc-800 transition text-zinc-300">Cancel</button>
+                    <button type="submit" class="flex-1 py-3 text-sm font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-950 rounded-xl transition shadow-sm">Save Book</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <!-- Catalog View Section -->
-    <h2>My Library</h2>
-    <div class="stats" id="book-count">Total Books: 0</div>
-    <div class="book-grid" id="catalog-grid"></div>
+    <!-- Modal: Edit Book Detail -->
+    <div id="edit-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl relative border border-zinc-800 transform scale-95 transition-all text-zinc-100">
+            <button onclick="closeModal('edit-modal')" class="absolute top-4 right-4 p-2 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-zinc-200 transition">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <h3 class="font-serif text-xl font-bold text-zinc-50 mb-2">Edit Book Record</h3>
+            <p class="text-zinc-400 text-xs mb-6">Modify details, author listings, metadata, or customize cover art settings.</p>
+            <form id="edit-form" onsubmit="handleEditForm(event)" class="space-y-4">
+                <input type="hidden" id="edit-id">
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1.5">Book Title <span class="text-red-400">*</span></label>
+                    <input type="text" id="edit-title" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1.5">Author <span class="text-red-400">*</span></label>
+                    <input type="text" id="edit-author" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-zinc-400 mb-1.5">ISBN Number</label>
+                        <input type="text" id="edit-isbn" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-zinc-400 mb-1.5">Publisher</label>
+                        <input type="text" id="edit-publisher" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1.5">Custom Cover Image URL</label>
+                    <input type="url" id="edit-cover" placeholder="https://..." class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition">
+                </div>
+                <div class="pt-2 flex gap-3">
+                    <button type="button" onclick="closeModal('edit-modal')" class="flex-1 py-3 text-sm font-semibold border border-zinc-800 rounded-xl hover:bg-zinc-800 transition text-zinc-300">Cancel</button>
+                    <button type="submit" class="flex-1 py-3 text-sm font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-950 rounded-xl transition shadow-sm">Apply Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Custom Confirmation Dialog -->
+    <div id="delete-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-zinc-900 rounded-3xl max-w-xs w-full p-6 shadow-2xl relative border border-zinc-800 text-center text-zinc-100">
+            <input type="hidden" id="delete-target-id">
+            <div class="w-12 h-12 bg-rose-950/30 border border-rose-900/30 rounded-2xl flex items-center justify-center text-rose-400 mx-auto mb-4">
+                <i data-lucide="trash-2" class="w-6 h-6"></i>
+            </div>
+            <h4 class="font-serif font-bold text-zinc-50 text-lg mb-1">Remove Book?</h4>
+            <p class="text-xs text-zinc-400 mb-6">This action cannot be undone. It will remove this book from your local database.</p>
+            <div class="flex gap-2">
+                <button onclick="closeModal('delete-modal')" class="flex-1 py-2.5 text-xs font-semibold border border-zinc-800 rounded-xl hover:bg-zinc-800 transition text-zinc-300">Keep</button>
+                <button onclick="confirmDelete()" class="flex-1 py-2.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-xl transition">Remove</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        let library = JSON.parse(localStorage.getItem('my_book_catalog')) || [];
+        // Core local database instance
+        let catalog = JSON.parse(localStorage.getItem('book_room_catalog')) || [
+            // Safe pre-populated default entries matching regional & classic interests
+            {
+                id: "seed-1",
+                title: "Čudnovate zgode šegrta Hlapića",
+                author: "Ivana Brlić-Mažuranić",
+                isbn: "9789531405904",
+                publisher: "Mozaik knjiga",
+                cover: ""
+            },
+            {
+                id: "seed-2",
+                title: "Na Drini ćuprija",
+                author: "Ivo Andrić",
+                isbn: "9788617150561",
+                publisher: "Zavod za udžbenike",
+                cover: ""
+            }
+        ];
 
-        // Initialize the Barcode Scanner
-        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-            fps: 10, 
-            qrbox: { width: 250, height: 150 }, // Aspect ratio optimized for long barcodes
-            formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13 ] // standard book barcodes
-        });
-        
-        html5QrcodeScanner.render(onScanSuccess);
+        let html5QrCode = null;
+        let isScannerActive = false;
 
-        function onScanSuccess(decodedText, decodedResult) {
-            // Stop scanning temporarily to avoid duplicate hits
-            html5QrcodeScanner.clear();
-            fetchBookData(decodedText);
-        }
+        // Dark-toned customized empty states color options
+        const designColors = [
+            { bg: 'from-amber-950/70 to-zinc-950', border: 'border-amber-900/30' },
+            { bg: 'from-blue-950/70 to-zinc-950', border: 'border-blue-900/30' },
+            { bg: 'from-emerald-950/70 to-zinc-950', border: 'border-emerald-900/30' },
+            { bg: 'from-rose-950/70 to-zinc-950', border: 'border-rose-900/30' },
+            { bg: 'from-purple-950/70 to-zinc-950', border: 'border-purple-900/30' }
+        ];
 
-        function lookupManualISBN() {
-            const isbn = document.getElementById('isbn-input').value.trim();
-            if (isbn) fetchBookData(isbn);
-        }
+        // Lookup API Orchestrator (Google Books with Open Library Fallback)
+        async function fetchBookByISBN(isbn) {
+            const cleanIsbn = isbn.replace(/[- ]/g, "").trim();
+            if (cleanIsbn.length < 10) return showToast("Invalid ISBN length.", "error");
 
-        // Fetch book metadata from Open Library API
-        function fetchBookData(isbn) {
-            // Clean up the ISBN string
-            const cleanIsbn = isbn.replace(/[- ]/g, "");
-            
-            // Check if book already exists in catalog
-            if (library.some(book => book.isbn === cleanIsbn)) {
-                alert("This book is already in your catalog!");
-                resetScanner();
+            // Look inside current catalog first
+            if (catalog.some(book => book.isbn === cleanIsbn)) {
+                showToast("This book is already in your catalogue!", "warning");
                 return;
             }
 
-            const apiUrl = `https://openlibrary.org/api/books?bibkeys=ISBN:${cleanIsbn}&jscmd=data&format=json`;
+            showToast("Searching international and regional databases...", "info");
 
-            fetch(apiUrl)
-                .then(response => response.json())
-                .then(data => {
-                    const bookKey = `ISBN:${cleanIsbn}`;
-                    if (data && data[bookKey]) {
-                        const bookInfo = data[bookKey];
-                        
-                        const newBook = {
-                            isbn: cleanIsbn,
-                            title: bookInfo.title || "Unknown Title",
-                            author: bookInfo.authors ? bookInfo.authors[0].name : "Unknown Author",
-                            cover: bookInfo.cover ? bookInfo.cover.medium : ""
-                        };
+            try {
+                // Step 1: Query Google Books API (Incredibly deep index including Croatian books)
+                const gBooksUrl = `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`;
+                const gResponse = await fetch(gBooksUrl);
+                const gData = await gResponse.json();
 
-                        library.push(newBook);
-                        saveLibrary();
-                        renderLibrary();
-                    } else {
-                        alert("Book not found in Open Library database. You can try manual entry later.");
+                if (gData && gData.items && gData.items.length > 0) {
+                    const info = gData.items[0].volumeInfo;
+                    const book = {
+                        id: 'book_' + Date.now(),
+                        title: info.title || "Unknown Title",
+                        author: info.authors ? info.authors.join(', ') : "Unknown Author",
+                        isbn: cleanIsbn,
+                        publisher: info.publisher || "Unknown Publisher",
+                        cover: info.imageLinks ? info.imageLinks.thumbnail.replace('http://', 'https://') : ""
+                    };
+                    addBook(book);
+                    return;
+                }
+
+                // Step 2: Fallback to Open Library API
+                const olUrl = `https://openlibrary.org/api/books?bibkeys=ISBN:${cleanIsbn}&jscmd=data&format=json`;
+                const olResponse = await fetch(olUrl);
+                const olData = await olResponse.json();
+                const olKey = `ISBN:${cleanIsbn}`;
+
+                if (olData && olData[olKey]) {
+                    const info = olData[olKey];
+                    const book = {
+                        id: 'book_' + Date.now(),
+                        title: info.title || "Unknown Title",
+                        author: info.authors ? info.authors.map(a => a.name).join(', ') : "Unknown Author",
+                        isbn: cleanIsbn,
+                        publisher: info.publishers ? info.publishers.map(p => p.name).join(', ') : "Unknown Publisher",
+                        cover: info.cover ? info.cover.medium : ""
+                    };
+                    addBook(book);
+                    return;
+                }
+
+                // If nothing found
+                showToast("Could not retrieve information automatically. Try adding details manually!", "warning");
+                // Open add modal pre-filled with the scanned ISBN
+                document.getElementById('add-isbn').value = cleanIsbn;
+                openModal('add-modal');
+
+            } catch (err) {
+                console.error("Lookup Failure: ", err);
+                showToast("Database search failed. Please connect to internet or check input.", "error");
+            }
+        }
+
+        // Control Barcode Scanning Pipeline
+        async function toggleScanner() {
+            const panel = document.getElementById('scanner-panel');
+            const button = document.getElementById('scanner-btn');
+
+            if (isScannerActive) {
+                // Shutdown scanner cleanly
+                isScannerActive = false;
+                button.innerText = "Open Camera";
+                button.className = "px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl transition shadow-lg shadow-amber-500/10";
+                panel.classList.add('hidden');
+                
+                if (html5QrCode) {
+                    try {
+                        await html5QrCode.stop();
+                    } catch (err) {
+                        console.warn("Scanner stop issue: ", err);
                     }
-                    resetScanner();
-                })
-                .catch(err => {
-                    console.error("API Error: ", err);
-                    alert("Error fetching book data.");
-                    resetScanner();
-                });
+                }
+            } else {
+                // Startup scanner cleanly
+                panel.classList.remove('hidden');
+                button.innerText = "Closing Camera";
+                button.className = "px-4 py-2 bg-zinc-800 text-zinc-400 font-bold text-xs rounded-xl transition cursor-not-allowed";
+
+                // Initialize camera list
+                try {
+                    const devices = await Html5Qrcode.getCameras();
+                    if (!devices || devices.length === 0) {
+                        showToast("No camera devices found.", "error");
+                        panel.classList.add('hidden');
+                        button.innerText = "Open Camera";
+                        button.className = "px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl transition";
+                        return;
+                    }
+
+                    // Populate Camera selector
+                    const select = document.getElementById('camera-select');
+                    select.innerHTML = "";
+                    devices.forEach(d => {
+                        const opt = document.createElement('option');
+                        opt.value = d.id;
+                        opt.text = d.label || "Camera " + (select.length + 1);
+                        select.appendChild(opt);
+                    });
+
+                    // Build target Instance
+                    html5QrCode = new Html5Qrcode("reader");
+                    
+                    // Selected camera logic
+                    const startCamera = async (cameraId) => {
+                        try {
+                            await html5QrCode.start(
+                                cameraId,
+                                {
+                                    fps: 15,
+                                    qrbox: { width: 250, height: 130 }
+                                },
+                                (decodedText) => {
+                                    // Found a barcode!
+                                    // Produce physical haptic feedback if mobile browser permits
+                                    if (navigator.vibrate) navigator.vibrate(100);
+                                    
+                                    // Auto stop scanner to fetch data
+                                    toggleScanner(); 
+                                    fetchBookByISBN(decodedText);
+                                },
+                                (errorMessage) => {
+                                    // Suppress verbose scanner matching noise
+                                }
+                            );
+                            isScannerActive = true;
+                            button.innerText = "Close Scanner";
+                            button.className = "px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-rose-600/20";
+                        } catch (err) {
+                            showToast("Error starting camera view.", "error");
+                            console.error(err);
+                        }
+                    };
+
+                    // Initial boot of default camera
+                    await startCamera(devices[devices.length - 1].id); // Usually the back-facing camera is last in list
+
+                    // Re-bind change selector
+                    select.onchange = async () => {
+                        if (html5QrCode) {
+                            await html5QrCode.stop();
+                            startCamera(select.value);
+                        }
+                    };
+
+                } catch (err) {
+                    showToast("Camera permissions are required to scan barcodes.", "error");
+                    panel.classList.add('hidden');
+                    button.innerText = "Open Camera";
+                    button.className = "px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl transition";
+                }
+            }
         }
 
-        function resetScanner() {
-            document.getElementById('isbn-input').value = "";
-            // Restart the scanner camera loop
-            html5QrcodeScanner.render(onScanSuccess);
+        // CRUD Database Handlers
+        function addBook(book) {
+            catalog.push(book);
+            saveCatalog();
+            renderCatalog();
+            showToast(`Added: "${book.title}" successfully.`, "success");
         }
 
-        function saveLibrary() {
-            localStorage.setItem('my_book_catalog', JSON.stringify(library));
+        function handleAddForm(event) {
+            event.preventDefault();
+            const title = document.getElementById('add-title').value.trim();
+            const author = document.getElementById('add-author').value.trim();
+            const isbn = document.getElementById('add-isbn').value.replace(/[- ]/g, "").trim();
+            const publisher = document.getElementById('add-publisher').value.trim();
+            const cover = document.getElementById('add-cover').value.trim();
+
+            const book = {
+                id: 'book_' + Date.now(),
+                title,
+                author,
+                isbn: isbn || "",
+                publisher: publisher || "Self-Published",
+                cover
+            };
+
+            addBook(book);
+            closeModal('add-modal');
+            document.getElementById('add-form').reset();
         }
 
-        function renderLibrary() {
+        function openEditModal(id) {
+            const book = catalog.find(b => b.id === id);
+            if (!book) return;
+
+            document.getElementById('edit-id').value = book.id;
+            document.getElementById('edit-title').value = book.title;
+            document.getElementById('edit-author').value = book.author;
+            document.getElementById('edit-isbn').value = book.isbn || "";
+            document.getElementById('edit-publisher').value = book.publisher || "";
+            document.getElementById('edit-cover').value = book.cover || "";
+
+            openModal('edit-modal');
+        }
+
+        function handleEditForm(event) {
+            event.preventDefault();
+            const id = document.getElementById('edit-id').value;
+            const title = document.getElementById('edit-title').value.trim();
+            const author = document.getElementById('edit-author').value.trim();
+            const isbn = document.getElementById('edit-isbn').value.replace(/[- ]/g, "").trim();
+            const publisher = document.getElementById('edit-publisher').value.trim();
+            const cover = document.getElementById('edit-cover').value.trim();
+
+            const index = catalog.findIndex(b => b.id === id);
+            if (index !== -1) {
+                catalog[index] = { ...catalog[index], title, author, isbn, publisher, cover };
+                saveCatalog();
+                renderCatalog();
+                showToast("Updated book profile.", "success");
+            }
+            closeModal('edit-modal');
+        }
+
+        function openDeleteModal(id) {
+            document.getElementById('delete-target-id').value = id;
+            openModal('delete-modal');
+        }
+
+        function confirmDelete() {
+            const id = document.getElementById('delete-target-id').value;
+            const book = catalog.find(b => b.id === id);
+            if (book) {
+                catalog = catalog.filter(b => b.id !== id);
+                saveCatalog();
+                renderCatalog();
+                showToast(`Removed "${book.title}" from library.`, "success");
+            }
+            closeModal('delete-modal');
+        }
+
+        // Render & Filter Interface Views
+        function renderCatalog(filteredList = null) {
+            const targetList = filteredList || catalog;
             const grid = document.getElementById('catalog-grid');
-            const countLabel = document.getElementById('book-count');
+            const emptyState = document.getElementById('empty-state');
+            
             grid.innerHTML = "";
-            countLabel.innerText = `Total Books: ${library.length}`;
 
-            // Render books starting with the newest additions
-            library.slice().reverse().forEach(book => {
+            if (targetList.length === 0) {
+                emptyState.classList.remove('hidden');
+                grid.classList.add('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                grid.classList.remove('hidden');
+            }
+
+            // Render modern bookcards inside dark clean containers
+            targetList.slice().reverse().forEach(book => {
                 const card = document.createElement('div');
-                card.className = 'book-card';
-                
-                const coverImg = book.cover ? book.cover : 'https://via.placeholder.com/120x170?text=No+Cover';
-                
+                card.className = "bg-zinc-900 border border-zinc-800/80 rounded-2xl p-4 shadow-sm hover:shadow-md transition duration-300 flex flex-col justify-between group relative";
+
+                // Cover View configuration
+                let coverHtml = "";
+                if (book.cover) {
+                    coverHtml = `<img src="${book.cover}" class="w-full aspect-[3/4] object-cover rounded-xl shadow-md group-hover:scale-[1.02] transition duration-300" alt="Cover Art">`;
+                } else {
+                    // Stylized Typographic Cover Design
+                    // Dynamic color hashing based on title letters
+                    const colorIndex = (book.title.charCodeAt(0) || 0) % designColors.length;
+                    const styleSet = designColors[colorIndex];
+                    const initials = book.title.substring(0, 2).toUpperCase();
+
+                    coverHtml = `
+                        <div class="w-full aspect-[3/4] bg-gradient-to-br ${styleSet.bg} rounded-xl shadow-md flex flex-col justify-between p-4 relative overflow-hidden text-white border ${styleSet.border}">
+                            <div class="text-[10px] uppercase font-semibold tracking-widest text-zinc-400">${book.author.split(',')[0]}</div>
+                            <div class="flex flex-col gap-1 my-auto">
+                                <span class="text-3xl font-serif font-black text-amber-500/10 absolute -right-2 top-12 scale-150">${initials}</span>
+                                <h4 class="font-serif font-bold text-sm leading-snug line-clamp-3 text-amber-100">${book.title}</h4>
+                            </div>
+                            <div class="text-[9px] font-mono uppercase tracking-wider text-zinc-500 border-t border-zinc-800/80 pt-2">${book.publisher || 'Edition'}</div>
+                        </div>
+                    `;
+                }
+
                 card.innerHTML = `
-                    <img src="${coverImg}" alt="${book.title}">
-                    <div class="book-title">${book.title}</div>
-                    <div class="book-author">${book.author}</div>
+                    <div>
+                        <div class="relative overflow-hidden mb-3.5">
+                            ${coverHtml}
+                        </div>
+                        <h4 class="font-serif font-semibold text-zinc-100 text-sm line-clamp-2 leading-tight mb-1" title="${book.title}">${book.title}</h4>
+                        <p class="text-xs text-zinc-400 font-medium truncate mb-2">${book.author}</p>
+                    </div>
+                    <div>
+                        ${book.isbn ? `
+                            <div class="flex items-center gap-1.5 py-1 px-2 bg-zinc-950 border border-zinc-800/80 rounded-lg text-zinc-400 font-mono text-[10px] w-fit mb-3">
+                                <i data-lucide="barcode" class="w-3.5 h-3.5 text-zinc-500"></i> ${book.isbn}
+                            </div>
+                        ` : ''}
+                        <div class="flex gap-2 pt-2 border-t border-zinc-800/60">
+                            <button onclick="openEditModal('${book.id}')" class="flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-zinc-300 bg-zinc-950 hover:bg-zinc-850 border border-zinc-850 rounded-lg transition">
+                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i> Edit
+                            </button>
+                            <button onclick="openDeleteModal('${book.id}')" class="px-2.5 py-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/30 rounded-lg transition">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
                 `;
                 grid.appendChild(card);
             });
+
+            // Update Statistics
+            document.getElementById('stat-total').innerText = catalog.length;
+            const uniqueAuthors = new Set(catalog.map(b => b.author));
+            document.getElementById('stat-authors').innerText = uniqueAuthors.size;
+
+            // Trigger lucide on new elements
+            lucide.createIcons();
         }
 
-        // Initial render on page load
-        renderLibrary();
+        function filterCatalog() {
+            const term = document.getElementById('search-input').value.toLowerCase().trim();
+            if (term === "") {
+                renderCatalog();
+            } else {
+                const filtered = catalog.filter(book => {
+                    return book.title.toLowerCase().includes(term) ||
+                           book.author.toLowerCase().includes(term) ||
+                           (book.isbn && book.isbn.includes(term));
+                });
+                renderCatalog(filtered);
+            }
+        }
+
+        // Backup / Restore JSON files
+        function exportCatalog() {
+            if (catalog.length === 0) return showToast("Nothing to export.", "warning");
+            
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(catalog, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `bookroom_backup_${new Date().toISOString().slice(0, 10)}.json`);
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+            showToast("Backup downloaded safely.", "success");
+        }
+
+        function importCatalog(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        // Merge on id matches or append completely
+                        catalog = imported;
+                        saveCatalog();
+                        renderCatalog();
+                        showToast("Library successfully imported!", "success");
+                    } else {
+                        showToast("Invalid data structure inside JSON file.", "error");
+                    }
+                } catch (err) {
+                    showToast("Could not parse JSON schema.", "error");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Shared LocalStorage Save
+        function saveCatalog() {
+            localStorage.setItem('book_room_catalog', JSON.stringify(catalog));
+        }
+
+        // Toast Notification System
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            // Layout styling configuration for Dark Mode
+            let borderSet = "border-zinc-800 bg-zinc-900 text-zinc-100";
+            let icon = "info";
+            
+            if (type === "success") {
+                borderSet = "border-emerald-900/40 bg-emerald-950/20 text-emerald-400";
+                icon = "check-circle";
+            } else if (type === "warning") {
+                borderSet = "border-amber-900/40 bg-amber-950/20 text-amber-400";
+                icon = "alert-triangle";
+            } else if (type === "error") {
+                borderSet = "border-rose-900/40 bg-rose-950/20 text-rose-400";
+                icon = "alert-circle";
+            }
+
+            toast.className = `flex items-center gap-3 p-4 border rounded-2xl shadow-lg transition duration-300 transform translate-y-2 opacity-0 pointer-events-auto ${borderSet}`;
+            toast.innerHTML = `
+                <i data-lucide="${icon}" class="w-5 h-5 flex-shrink-0"></i>
+                <span class="text-xs font-semibold leading-relaxed">${message}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons({ attrs: { class: 'lucide-icon' } });
+
+            // Entrance anim
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            // Exit animation
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'scale-95');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // Modal triggers
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.firstElementChild.classList.remove('scale-95');
+            }, 10);
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.firstElementChild.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 150);
+        }
+
+        // Setup environment
+        window.addEventListener('DOMContentLoaded', () => {
+            renderCatalog();
+        });
     </script>
 </body>
 </html>
