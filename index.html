@@ -280,7 +280,7 @@
     <script>
         // Core local database instance
         let catalog = JSON.parse(localStorage.getItem('book_room_catalog')) || [
-            // Safe pre-populated default entries matching regional & classic interests
+            // Pre-populated default entries for local interest
             {
                 id: "seed-1",
                 title: "Čudnovate zgode šegrta Hlapića",
@@ -311,9 +311,9 @@
             { bg: 'from-purple-950/70 to-zinc-950', border: 'border-purple-900/30' }
         ];
 
-        // Lookup API Orchestrator (Google Books with Open Library Fallback)
+        // Lookup API Orchestrator (Google Books + Open Library with sequential fallbacks for deep Croatian coverage)
         async function fetchBookByISBN(isbn) {
-            const cleanIsbn = isbn.replace(/[- ]/g, "").trim();
+            const cleanIsbn = isbn.replace(/[^0-9X]/gi, "").trim();
             if (cleanIsbn.length < 10) return showToast("Invalid ISBN length.", "error");
 
             // Look inside current catalog first
@@ -322,58 +322,102 @@
                 return;
             }
 
-            showToast("Searching international and regional databases...", "info");
+            showToast("Querying regional and global book catalogs...", "info");
 
-            try {
-                // Step 1: Query Google Books API (Incredibly deep index including Croatian books)
-                const gBooksUrl = `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`;
-                const gResponse = await fetch(gBooksUrl);
-                const gData = await gResponse.json();
-
-                if (gData && gData.items && gData.items.length > 0) {
-                    const info = gData.items[0].volumeInfo;
-                    const book = {
-                        id: 'book_' + Date.now(),
-                        title: info.title || "Unknown Title",
-                        author: info.authors ? info.authors.join(', ') : "Unknown Author",
-                        isbn: cleanIsbn,
-                        publisher: info.publisher || "Unknown Publisher",
-                        cover: info.imageLinks ? info.imageLinks.thumbnail.replace('http://', 'https://') : ""
-                    };
-                    addBook(book);
-                    return;
+            // Sequential lookup strategies for maximal lookup performance on Croatian/International prints
+            const lookupStrategies = [
+                // Strategy 1: Google Books API Precise ISBN Lookup
+                async () => {
+                    const gBooksUrl = `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`;
+                    const res = await fetch(gBooksUrl);
+                    const data = await res.json();
+                    if (data && data.items && data.items.length > 0) {
+                        const info = data.items[0].volumeInfo;
+                        return {
+                            id: 'book_' + Date.now(),
+                            title: info.title || "Unknown Title",
+                            author: info.authors ? info.authors.join(', ') : "Unknown Author",
+                            isbn: cleanIsbn,
+                            publisher: info.publisher || "Unknown Publisher",
+                            cover: info.imageLinks ? info.imageLinks.thumbnail.replace('http://', 'https://') : ""
+                        };
+                    }
+                    return null;
+                },
+                // Strategy 2: Google Books Broad Text Fallback (In case the ISBN isn't mapped to the exact index but matches page text)
+                async () => {
+                    const gBooksUrl = `https://www.googleapis.com/books/v1/volumes?q=${cleanIsbn}`;
+                    const res = await fetch(gBooksUrl);
+                    const data = await res.json();
+                    if (data && data.items && data.items.length > 0) {
+                        const info = data.items[0].volumeInfo;
+                        return {
+                            id: 'book_' + Date.now(),
+                            title: info.title || "Unknown Title",
+                            author: info.authors ? info.authors.join(', ') : "Unknown Author",
+                            isbn: cleanIsbn,
+                            publisher: info.publisher || "Unknown Publisher",
+                            cover: info.imageLinks ? info.imageLinks.thumbnail.replace('http://', 'https://') : ""
+                        };
+                    }
+                    return null;
+                },
+                // Strategy 3: Open Library API Direct Registry Lookup
+                async () => {
+                    const olUrl = `https://openlibrary.org/api/books?bibkeys=ISBN:${cleanIsbn}&jscmd=data&format=json`;
+                    const res = await fetch(olUrl);
+                    const data = await res.json();
+                    const olKey = `ISBN:${cleanIsbn}`;
+                    if (data && data[olKey]) {
+                        const info = data[olKey];
+                        return {
+                            id: 'book_' + Date.now(),
+                            title: info.title || "Unknown Title",
+                            author: info.authors ? info.authors.map(a => a.name).join(', ') : "Unknown Author",
+                            isbn: cleanIsbn,
+                            publisher: info.publishers ? info.publishers.map(p => p.name).join(', ') : "Unknown Publisher",
+                            cover: info.cover ? info.cover.medium : ""
+                        };
+                    }
+                    return null;
+                },
+                // Strategy 4: Open Library Search API Full-Text Fallback (Highly robust fallback indexing)
+                async () => {
+                    const olSearchUrl = `https://openlibrary.org/search.json?q=${cleanIsbn}`;
+                    const res = await fetch(olSearchUrl);
+                    const data = await res.json();
+                    if (data && data.docs && data.docs.length > 0) {
+                        const doc = data.docs[0];
+                        return {
+                            id: 'book_' + Date.now(),
+                            title: doc.title || "Unknown Title",
+                            author: doc.author_name ? doc.author_name.join(', ') : "Unknown Author",
+                            isbn: cleanIsbn,
+                            publisher: doc.publisher ? doc.publisher[0] : "Unknown Publisher",
+                            cover: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : ""
+                        };
+                    }
+                    return null;
                 }
+            ];
 
-                // Step 2: Fallback to Open Library API
-                const olUrl = `https://openlibrary.org/api/books?bibkeys=ISBN:${cleanIsbn}&jscmd=data&format=json`;
-                const olResponse = await fetch(olUrl);
-                const olData = await olResponse.json();
-                const olKey = `ISBN:${cleanIsbn}`;
-
-                if (olData && olData[olKey]) {
-                    const info = olData[olKey];
-                    const book = {
-                        id: 'book_' + Date.now(),
-                        title: info.title || "Unknown Title",
-                        author: info.authors ? info.authors.map(a => a.name).join(', ') : "Unknown Author",
-                        isbn: cleanIsbn,
-                        publisher: info.publishers ? info.publishers.map(p => p.name).join(', ') : "Unknown Publisher",
-                        cover: info.cover ? info.cover.medium : ""
-                    };
-                    addBook(book);
-                    return;
+            // Run through lookup strategies sequentially
+            for (let i = 0; i < lookupStrategies.length; i++) {
+                try {
+                    const book = await lookupStrategies[i]();
+                    if (book) {
+                        addBook(book);
+                        return; // Found a match! Break out early.
+                    }
+                } catch (err) {
+                    console.warn(`Query Strategy ${i + 1} experienced connection constraints:`, err);
                 }
-
-                // If nothing found
-                showToast("Could not retrieve information automatically. Try adding details manually!", "warning");
-                // Open add modal pre-filled with the scanned ISBN
-                document.getElementById('add-isbn').value = cleanIsbn;
-                openModal('add-modal');
-
-            } catch (err) {
-                console.error("Lookup Failure: ", err);
-                showToast("Database search failed. Please connect to internet or check input.", "error");
             }
+
+            // Fallback for completely unregistered publications (Manual Modal triggers with scanned ISBN)
+            showToast("Could not retrieve info automatically. Please key in details manually!", "warning");
+            document.getElementById('add-isbn').value = cleanIsbn;
+            openModal('add-modal');
         }
 
         // Control Barcode Scanning Pipeline
@@ -436,7 +480,6 @@
                                 },
                                 (decodedText) => {
                                     // Found a barcode!
-                                    // Produce physical haptic feedback if mobile browser permits
                                     if (navigator.vibrate) navigator.vibrate(100);
                                     
                                     // Auto stop scanner to fetch data
@@ -444,7 +487,7 @@
                                     fetchBookByISBN(decodedText);
                                 },
                                 (errorMessage) => {
-                                    // Suppress verbose scanner matching noise
+                                    // Suppress verbose matching logs
                                 }
                             );
                             isScannerActive = true;
@@ -456,8 +499,8 @@
                         }
                     };
 
-                    // Initial boot of default camera
-                    await startCamera(devices[devices.length - 1].id); // Usually the back-facing camera is last in list
+                    // Initial boot of default camera (Rear-facing camera typically resolved last in indexing)
+                    await startCamera(devices[devices.length - 1].id);
 
                     // Re-bind change selector
                     select.onchange = async () => {
@@ -488,7 +531,7 @@
             event.preventDefault();
             const title = document.getElementById('add-title').value.trim();
             const author = document.getElementById('add-author').value.trim();
-            const isbn = document.getElementById('add-isbn').value.replace(/[- ]/g, "").trim();
+            const isbn = document.getElementById('add-isbn').value.replace(/[^0-9X]/gi, "").trim();
             const publisher = document.getElementById('add-publisher').value.trim();
             const cover = document.getElementById('add-cover').value.trim();
 
@@ -525,7 +568,7 @@
             const id = document.getElementById('edit-id').value;
             const title = document.getElementById('edit-title').value.trim();
             const author = document.getElementById('edit-author').value.trim();
-            const isbn = document.getElementById('edit-isbn').value.replace(/[- ]/g, "").trim();
+            const isbn = document.getElementById('edit-isbn').value.replace(/[^0-9X]/gi, "").trim();
             const publisher = document.getElementById('edit-publisher').value.trim();
             const cover = document.getElementById('edit-cover').value.trim();
 
@@ -572,7 +615,7 @@
                 grid.classList.remove('hidden');
             }
 
-            // Render modern bookcards inside dark clean containers
+            // Render book cards in standard viewport layout
             targetList.slice().reverse().forEach(book => {
                 const card = document.createElement('div');
                 card.className = "bg-zinc-900 border border-zinc-800/80 rounded-2xl p-4 shadow-sm hover:shadow-md transition duration-300 flex flex-col justify-between group relative";
@@ -582,8 +625,7 @@
                 if (book.cover) {
                     coverHtml = `<img src="${book.cover}" class="w-full aspect-[3/4] object-cover rounded-xl shadow-md group-hover:scale-[1.02] transition duration-300" alt="Cover Art">`;
                 } else {
-                    // Stylized Typographic Cover Design
-                    // Dynamic color hashing based on title letters
+                    // Stylized Typographic Cover design with hashing based on letters
                     const colorIndex = (book.title.charCodeAt(0) || 0) % designColors.length;
                     const styleSet = designColors[colorIndex];
                     const initials = book.title.substring(0, 2).toUpperCase();
@@ -632,7 +674,7 @@
             const uniqueAuthors = new Set(catalog.map(b => b.author));
             document.getElementById('stat-authors').innerText = uniqueAuthors.size;
 
-            // Trigger lucide on new elements
+            // Trigger lucide icons
             lucide.createIcons();
         }
 
@@ -673,7 +715,6 @@
                 try {
                     const imported = JSON.parse(e.target.result);
                     if (Array.isArray(imported)) {
-                        // Merge on id matches or append completely
                         catalog = imported;
                         saveCatalog();
                         renderCatalog();
@@ -688,7 +729,7 @@
             reader.readAsText(file);
         }
 
-        // Shared LocalStorage Save
+        // Save local catalogue
         function saveCatalog() {
             localStorage.setItem('book_room_catalog', JSON.stringify(catalog));
         }
@@ -698,7 +739,7 @@
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
             
-            // Layout styling configuration for Dark Mode
+            // Theme settings for toasts (Dark Theme matched)
             let borderSet = "border-zinc-800 bg-zinc-900 text-zinc-100";
             let icon = "info";
             
@@ -722,7 +763,7 @@
             container.appendChild(toast);
             lucide.createIcons({ attrs: { class: 'lucide-icon' } });
 
-            // Entrance anim
+            // Entrance animation
             setTimeout(() => {
                 toast.classList.remove('translate-y-2', 'opacity-0');
             }, 10);
@@ -734,7 +775,7 @@
             }, 3500);
         }
 
-        // Modal triggers
+        // Modal displays
         function openModal(modalId) {
             const modal = document.getElementById(modalId);
             modal.classList.remove('hidden');
@@ -751,7 +792,7 @@
             }, 150);
         }
 
-        // Setup environment
+        // Document Bootstrapper
         window.addEventListener('DOMContentLoaded', () => {
             renderCatalog();
         });
